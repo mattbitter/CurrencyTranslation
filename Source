@@ -1,0 +1,261 @@
+REPORT zbitter_02.
+
+*
+*by matthew bitter - 2015.
+*
+
+TABLES rszeltdir.
+
+***************************************
+*       DATA
+***************************************
+CONSTANTS error_text(40) TYPE c VALUE 'Not authorized - user is not BITTERMA'.
+TYPES: BEGIN OF prop_typ,
+         eltuid TYPE rszeltprop-eltuid,
+         cttnm  TYPE rszeltprop-cttnm,
+       END OF prop_typ.
+TYPES itab_prop_typ TYPE STANDARD TABLE OF prop_typ.
+DATA itab_prop TYPE itab_prop_typ.
+DATA wa_prop TYPE prop_typ.
+**
+TYPES: BEGIN OF txt_typ,
+         txtlg  TYPE rszelttxt-txtlg,
+         eltuid TYPE rszelttxt-eltuid,
+       END OF txt_typ.
+TYPES itab_txt_typ TYPE STANDARD TABLE OF txt_typ.
+DATA itab_txt TYPE itab_txt_typ.
+DATA wa_txt TYPE txt_typ.
+DATA itab_txt_atri TYPE itab_txt_typ.
+DATA wa_txt_atri TYPE txt_typ.
+**
+TYPES: BEGIN OF dir_typ,
+         eltuid      TYPE rszeltdir-eltuid,
+         mapname     TYPE rszeltdir-mapname,
+         defaulthint TYPE rszeltdir-defaulthint,
+       END OF dir_typ.
+TYPES itab_dir_typ TYPE STANDARD TABLE OF dir_typ.
+DATA itab_dir TYPE itab_dir_typ.
+DATA wa_dir TYPE dir_typ.
+DATA itab_dir_atri TYPE itab_dir_typ.
+DATA wa_dir_atri TYPE dir_typ.
+**
+TYPES: BEGIN OF xref_typ,
+         seltuid TYPE rszeltxref-seltuid,
+         teltuid TYPE rszeltxref-teltuid,
+         laytp   TYPE rszeltxref-laytp,
+       END OF xref_typ.
+TYPES itab_xref_typ TYPE STANDARD TABLE OF xref_typ.
+DATA itab_xref TYPE itab_xref_typ.
+DATA wa_xref TYPE xref_typ.
+*
+DATA itab_qry TYPE itab_xref_typ.
+DATA wa_qry TYPE xref_typ.
+**
+DATA line_cnt TYPE i.
+DATA line_cnt2 TYPE i.
+**
+TYPES: BEGIN OF results2_typ,
+         seltuid TYPE rszeltxref-seltuid,
+         eltuid  TYPE rszeltxref-teltuid,
+         laytp   TYPE rszeltxref-laytp,
+       END OF results2_typ.
+TYPES itab_results2_typ TYPE STANDARD TABLE OF results2_typ.
+DATA itab_results2 TYPE itab_results2_typ.
+DATA wa_results2 TYPE results2_typ.
+**
+TYPES: BEGIN OF final_typ,
+         seltuid     TYPE rszeltxref-seltuid,
+         eltuid      TYPE rszeltxref-teltuid,
+         laytp       TYPE rszeltxref-laytp,
+         mapname     TYPE rszeltdir-mapname,
+         defaulthint TYPE rszeltdir-defaulthint,
+         txtlg       TYPE rszelttxt-txtlg,
+         cttnm       TYPE rszeltprop-cttnm,
+         txtlg_atri  TYPE rszelttxt-txtlg,
+       END OF final_typ.
+TYPES itab_final_typ TYPE STANDARD TABLE OF final_typ.
+DATA itab_final TYPE itab_final_typ.
+DATA wa_final TYPE final_typ.
+DATA itab_rep_update TYPE itab_final_typ.
+DATA wa_rep_update TYPE final_typ.
+
+PARAMETERS: p_update RADIOBUTTON GROUP grp1,
+            p_select RADIOBUTTON GROUP grp1 DEFAULT 'X'.
+SELECT-OPTIONS p_report FOR rszeltdir-mapname NO INTERVALS.
+DATA wa_p_report LIKE p_report.
+*PARAMETERS p_report LIKE rszeltdir-mapname.
+*******************************************************
+*         END OF DATA STATEMENTS
+*******************************************************
+START-OF-SELECTION.
+
+  IF p_select = 'X'.
+    PERFORM select.
+    PERFORM write.
+  ELSEIF p_update = 'X'.
+    PERFORM select.
+    PERFORM update.
+  ENDIF.
+  ULINE.
+
+*******************************************************
+*START OF FORMS
+*******************************************************
+FORM select.
+****************LOOKUP INTO XREF TO FIND QUERY NAME
+  SELECT eltuid cttnm FROM rszeltprop UP TO 500 ROWS INTO CORRESPONDING FIELDS OF TABLE itab_prop
+    WHERE cttnm NE '' AND objvers = 'A' and eltuid = '4I9JIURUXPIF4LYTU0AN47BK3'.
+
+  LOOP AT itab_prop INTO wa_prop.
+    SELECT txtlg eltuid FROM rszelttxt INTO wa_txt_atri
+      WHERE eltuid = wa_prop-eltuid AND objvers = 'A'.
+    ENDSELECT.
+    IF wa_txt_atri-txtlg NE ''.
+
+      SELECT seltuid teltuid laytp FROM rszeltxref INTO CORRESPONDING FIELDS OF TABLE itab_xref
+        WHERE teltuid = wa_prop-eltuid AND objvers = 'A'.
+
+      LOOP AT itab_xref INTO wa_xref.
+        IF wa_xref-laytp = 'SHT' OR wa_xref-laytp = 'SOB' OR wa_xref-laytp = 'VAR'.
+          MOVE-CORRESPONDING wa_xref TO wa_results2.
+          MOVE-CORRESPONDING wa_prop TO wa_results2.
+          APPEND wa_results2 TO itab_results2.
+          EXIT.
+        ELSE.
+          SELECT seltuid teltuid laytp FROM rszeltxref INTO CORRESPONDING FIELDS OF TABLE itab_qry
+            WHERE teltuid = wa_xref-seltuid AND objvers = 'A'.
+          APPEND LINES OF itab_qry TO itab_xref.
+        ENDIF.
+
+      ENDLOOP.
+    ENDIF.
+    CLEAR: wa_xref, wa_prop,wa_txt_atri.
+
+  ENDLOOP.
+
+*************ADDITIONAL TABLES FOR INFORMATION
+  LOOP AT itab_results2 INTO wa_results2.
+    SELECT txtlg eltuid FROM rszelttxt INTO wa_txt
+      WHERE eltuid = wa_results2-seltuid AND objvers ='A'.
+      APPEND wa_txt TO itab_txt.
+    ENDSELECT.
+
+    SELECT txtlg eltuid FROM rszelttxt INTO wa_txt_atri
+     WHERE eltuid = wa_results2-eltuid AND objvers ='A'.
+      APPEND wa_txt_atri TO itab_txt_atri.
+    ENDSELECT.
+
+*  IF sy-subrc = 0.
+    SELECT eltuid mapname defaulthint FROM rszeltdir INTO wa_dir
+      WHERE objvers = 'A' AND eltuid = wa_results2-seltuid.
+      APPEND wa_dir TO itab_dir.
+    ENDSELECT.
+*  ENDIF.
+
+*  IF sy-subrc = 0.
+    SELECT eltuid mapname defaulthint FROM rszeltdir INTO wa_dir_atri
+      WHERE objvers = 'A' AND eltuid = wa_results2-eltuid.
+      APPEND wa_dir_atri TO itab_dir_atri.
+    ENDSELECT.
+*  ENDIF.
+    CLEAR: wa_dir_atri, wa_dir, wa_txt_atri, wa_txt, wa_results2.
+  ENDLOOP.
+
+******************MERGING ALL THE ITABS INTO FINAL.
+  SORT itab_dir BY eltuid.
+  SORT itab_results2 BY seltuid.
+  SORT itab_txt BY eltuid.
+  SORT itab_txt_atri BY eltuid.
+  SORT itab_prop BY eltuid.
+  SORT itab_dir_atri BY eltuid.
+
+  LOOP AT itab_results2 INTO wa_results2.
+    wa_final-seltuid = wa_results2-seltuid.
+    wa_final-eltuid = wa_results2-eltuid.
+    wa_final-laytp = wa_results2-laytp.
+
+    READ TABLE itab_txt INTO wa_txt WITH KEY eltuid = wa_results2-seltuid.
+    wa_final-txtlg = wa_txt-txtlg.
+
+    READ TABLE itab_txt_atri INTO wa_txt_atri WITH KEY eltuid = wa_results2-eltuid.
+    wa_final-txtlg_atri = wa_txt_atri-txtlg.
+
+    READ TABLE itab_prop INTO wa_prop WITH KEY eltuid = wa_results2-eltuid.
+    wa_final-cttnm = wa_prop-cttnm.
+
+    READ TABLE itab_dir_atri INTO wa_dir_atri WITH KEY eltuid = wa_results2-eltuid.
+    wa_final-defaulthint = wa_dir_atri-defaulthint.
+
+    READ TABLE itab_dir INTO wa_dir WITH KEY eltuid = wa_results2-seltuid.
+    wa_final-mapname = wa_dir-mapname.
+
+    APPEND wa_final TO itab_final.
+    CLEAR: wa_final, wa_prop, wa_txt, wa_results2, wa_dir, wa_txt_atri.
+  ENDLOOP.
+ENDFORM.
+
+FORM update.
+***************************UPDATES THE ACTUAL PROP TABLE WITH A NEW COVERSION VALUE
+  IF p_report = '' AND sy-uname = 'BITTERMA'.
+    DESCRIBE TABLE itab_final LINES line_cnt.
+    LOOP AT itab_final INTO wa_final.
+*  update RSZELTPROP set cttnm = 'ZFISCPER_M' where eltuid = wa_final-eltuid AND objvers = 'A'.
+      IF sy-subrc = 0.
+        WRITE: 'Update PASS - ' , line_cnt, ' updated'.
+      ELSE.
+        WRITE: 'update fail at ', wa_final-eltuid.
+      ENDIF.
+      CLEAR wa_final.
+    ENDLOOP.
+
+  ELSEIF p_report NE '' AND sy-uname = 'BITTERMA'.
+    PERFORM filter.
+    DESCRIBE TABLE itab_rep_update LINES line_cnt.
+    LOOP AT itab_rep_update INTO wa_rep_update.
+*  update RSZELTPROP set cttnm = 'ZFISCPER_M' where eltuid = wa_rep_update-eltuid AND objvers = 'A'.
+      IF sy-subrc = 0.
+        WRITE: 'Update PASS (report selection) - ', line_cnt, ' updated'.
+      ELSE.
+        WRITE: 'update for report selection fail at ', wa_final-eltuid.
+      ENDIF.
+      CLEAR wa_rep_update.
+    ENDLOOP.
+  ELSE.
+    MESSAGE e000(rsdso_test) WITH error_text.
+
+  ENDIF.
+ENDFORM.
+
+FORM write.
+*****************WRITING FOR THE SELECTION OPTION
+  IF p_report = ''.
+    DESCRIBE TABLE itab_results2 LINES line_cnt.
+    DESCRIBE TABLE itab_final LINES line_cnt2.
+    WRITE line_cnt.
+    WRITE: / line_cnt2.
+    ULINE.
+    LOOP AT itab_final INTO wa_final.
+      WRITE: / wa_final-eltuid, ' ', wa_final-seltuid(5), ' ', wa_final-mapname, '-', wa_final-defaulthint(5), '-', wa_final-txtlg_atri(30), '-', wa_final-txtlg(15), '-',
+        wa_final-cttnm, '-'.
+      CLEAR: wa_final.
+    ENDLOOP.
+  ELSEIF p_report NE ''.
+    PERFORM filter.
+    LOOP AT itab_rep_update INTO wa_rep_update.
+      WRITE: / wa_rep_update-eltuid, ' ', wa_rep_update-seltuid(5), ' ', wa_rep_update-mapname, '-', wa_rep_update-txtlg_atri(30), '-', wa_rep_update-txtlg(15), '-',
+         wa_rep_update-cttnm, '-'.
+      CLEAR wa_rep_update.
+    ENDLOOP.
+  ENDIF.
+
+ENDFORM.
+
+FORM filter.
+*************************FILTER THE WA_FINAL TABLE INTO A NEW ITAB FILTERD BY USER REPORT SELECTION
+  LOOP AT p_report INTO wa_p_report.
+    READ TABLE itab_final INTO wa_final WITH KEY mapname = wa_p_report-low.
+    wa_rep_update = wa_final.
+    APPEND wa_rep_update TO itab_rep_update.
+    CLEAR: wa_rep_update, wa_p_report.
+  ENDLOOP.
+ENDFORM.
